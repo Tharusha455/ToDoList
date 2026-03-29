@@ -14,7 +14,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, user
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'assignments', label: 'Assignments', icon: <FileText size={20} /> },
     { id: 'lectures', label: 'Calendar', icon: <Calendar size={20} /> },
-    { id: 'settings', label: 'Settings', icon: <Settings size={20} /> },
+    ...(user?.role === 'admin' ? [
+      { id: 'settings', label: 'Settings', icon: <Settings size={20} /> }
+    ] : []),
   ];
 
   return (

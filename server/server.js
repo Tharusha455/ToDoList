@@ -8,14 +8,12 @@ const Schedule = require('./models/Schedule');
 const Assignment = require('./models/Assignment');
 const User = require('./models/User');
 
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const session = require('express-session');
+const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const app = express();
 
-// CORS — allow requests from any localhost origin
 app.use(cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -23,85 +21,100 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Session & Passport Setup
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback_secret',
-  resave: false,
-  saveUninitialized: false
-}));
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/api/auth/google/callback"
-  },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      let user = await User.findOne({ googleId: profile.id });
-      
-      if (!user) {
-        // If it's the first user ever, make them admin
-        const userCount = await User.countDocuments();
-        user = new User({
-          googleId: profile.id,
-          name: profile.displayName,
-          email: profile.emails[0].value,
-          profilePic: profile.photos[0].value,
-          role: userCount === 0 ? 'admin' : 'student'
-        });
-        await user.save();
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err, null);
-    }
-  }
-));
-
-passport.serializeUser((user, done) => done(null, user.id));
-passport.deserializeUser(async (id, done) => {
-  const user = await User.findById(id);
-  done(null, user);
-});
-
 const PORT = process.env.PORT || 5000;
-// Use MONGODB_URI (Vercel standard) or MONGO_URI (.env)
-const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb+srv://todo:Password123@cluster0.yrxbtpb.mongodb.net/UniFlow?retryWrites=true&w=majority";
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 
+// ----- DATABASE CONNECTION -----
 let isDBConnected = false;
-
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('✅ Connected to MongoDB Atlas (UniFlow Database)');
+const connectDB = async () => {
+  if (!MONGO_URI) {
+    console.error('❌ MONGODB_URI is missing in .env');
+    return;
+  }
+  try {
+    await mongoose.connect(MONGO_URI);
     isDBConnected = true;
-  })
-  .catch(err => {
-    console.error('❌ MongoDB Connection Error Details:', err);
-    console.log('⚠️  Server running without DB — API will return empty arrays');
-  });
+    console.log('✅ MongoDB Connected Ready');
+  } catch (err) {
+    console.error('❌ MongoDB Connection Error:', err.message);
+    isDBConnected = false;
+  }
+};
+connectDB();
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', dbConnected: isDBConnected });
+// ----- MIDDLEWARE -----
+const checkDB = (req, res, next) => {
+  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected. Please try again in 30 seconds.' });
+  next();
+};
+
+const authenticate = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' });
+  
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).json({ error: 'User no longer exists' });
+    req.user = user;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// ----- AUTH ROUTES -----
+app.post('/api/auth/google', checkDB, async (req, res) => {
+  const { credential } = req.body;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const { sub, email, name, picture } = ticket.getPayload();
+    
+    let user = await User.findOne({ googleId: sub });
+    if (!user) {
+      const userCount = await User.countDocuments();
+      user = new User({
+        googleId: sub,
+        name,
+        email,
+        profilePic: picture,
+        role: userCount === 0 ? 'admin' : 'student'
+      });
+      await user.save();
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '7d' }
+    );
+    res.json({ token, user });
+  } catch (err) {
+    res.status(400).json({ error: 'Authentication failed' });
+  }
 });
+
+app.get('/api/auth/me', authenticate, (req, res) => res.json(req.user));
 
 // ----- TASK ROUTES -----
-app.get('/api/tasks', async (req, res) => {
-  if (!isDBConnected) return res.json([]);
+app.get('/api/tasks', checkDB, authenticate, async (req, res) => {
   try {
-    const tasks = await Task.find().sort({ DueDate: 1 });
+    // RBAC: Students only see their own tasks, Admins see all
+    const query = req.user.role === 'admin' ? {} : { user: req.user._id };
+    const tasks = await Task.find(query).sort({ CreatedAt: -1 });
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/tasks', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+app.post('/api/tasks', checkDB, authenticate, async (req, res) => {
   try {
-    const task = new Task(req.body);
+    const task = new Task({ ...req.body, user: req.user._id });
     const saved = await task.save();
     res.status(201).json(saved);
   } catch (err) {
@@ -109,85 +122,49 @@ app.post('/api/tasks', async (req, res) => {
   }
 });
 
-app.put('/api/tasks/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+// Other task routes should also be protected and check ownership if not admin
+app.put('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
   try {
-    const updated = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!updated) return res.status(404).json({ error: 'Task not found' });
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (req.user.role !== 'admin' && task.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const updated = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.delete('/api/tasks/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+app.delete('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
   try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (req.user.role !== 'admin' && task.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     await Task.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Task deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ----- SCHEDULE ROUTES -----
-app.get('/api/schedule', async (req, res) => {
-  if (!isDBConnected) return res.json([]);
-  try {
-    const schedules = await Schedule.find().sort({ Day: 1, StartTime: 1 });
-    res.json(schedules);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/schedule', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
-  try {
-    const entry = new Schedule(req.body);
-    const saved = await entry.save();
-    res.status(201).json(saved);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.put('/api/schedule/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
-  try {
-    const updated = await Schedule.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!updated) return res.status(404).json({ error: 'Schedule entry not found' });
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/schedule/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
-  try {
-    await Schedule.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Schedule entry deleted successfully' });
+    res.json({ message: 'Task deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ----- ASSIGNMENT ROUTES -----
-app.get('/api/assignments', async (req, res) => {
-  if (!isDBConnected) return res.json([]);
+app.get('/api/assignments', checkDB, authenticate, async (req, res) => {
   try {
-    const assignments = await Assignment.find().sort({ deadline: 1 });
+    const query = req.user.role === 'admin' ? {} : { user: req.user._id };
+    const assignments = await Assignment.find(query).sort({ deadline: 1 });
     res.json(assignments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/assignments', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+app.post('/api/assignments', checkDB, authenticate, async (req, res) => {
   try {
-    const assignment = new Assignment(req.body);
+    const assignment = new Assignment({ ...req.body, user: req.user._id });
     const saved = await assignment.save();
     res.status(201).json(saved);
   } catch (err) {
@@ -195,67 +172,52 @@ app.post('/api/assignments', async (req, res) => {
   }
 });
 
-app.put('/api/assignments/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+app.put('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
   try {
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (req.user.role !== 'admin' && assignment.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const updated = await Assignment.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!updated) return res.status(404).json({ error: 'Assignment not found' });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.delete('/api/assignments/:id', async (req, res) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+app.delete('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
   try {
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (req.user.role !== 'admin' && assignment.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     await Assignment.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Assignment deleted successfully' });
+    res.json({ message: 'Assignment deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ----- AUTH ROUTES -----
-app.get('/api/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
-
-app.get('/api/auth/google/callback', 
-  passport.authenticate('google', { failureRedirect: '/login' }),
-  (req, res) => {
-    // Generate JWT
-    const token = jwt.sign(
-      { id: req.user._id, role: req.user.role },
-      process.env.JWT_SECRET || 'jwt_fallback',
-      { expiresIn: '7d' }
-    );
-    
-    // Redirect back to frontend with token
-    res.redirect(`http://localhost:5173?token=${token}`);
-  }
-);
-
-app.get('/api/auth/me', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No token' });
-  
-  const token = authHeader.split(' ')[1];
+// ----- SCHEDULE ROUTES (Public or Shared) -----
+app.get('/api/schedule', checkDB, async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'jwt_fallback');
-    const user = await User.findById(decoded.id);
-    res.json(user);
+    const schedule = await Schedule.find();
+    res.json(schedule);
   } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Standard export for Vercel serverless functions
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', dbConnected: isDBConnected });
+});
+
 module.exports = app;
 
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`🚀 Local Server running on http://localhost:${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/api/health`);
   });
 }

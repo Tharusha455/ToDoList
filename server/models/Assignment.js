@@ -8,21 +8,24 @@ const assignmentSchema = new mongoose.Schema({
   },
   subject: {
     type: String,
-    required: true,
-    trim: true
+    required: true
   },
   description: {
-    type: String,
-    trim: true
+    type: String
   },
   deadline: {
-    type: Date,
+    type: String,
     required: true
   },
   status: {
     type: String,
     enum: ['Pending', 'Completed'],
     default: 'Pending'
+  },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
 }, {
   timestamps: true

@@ -21,6 +21,7 @@ import TaskCard from './components/TaskCard'
 import TaskForm from './components/TaskForm'
 import LectureCard from './components/LectureCard'
 import LectureForm from './components/LectureForm'
+import { GoogleLogin } from '@react-oauth/google'
 import { ProgressBar } from './components/DashboardWidgets'
 import AssignmentTab from './components/AssignmentTab'
 
@@ -109,9 +110,36 @@ function App() {
         setIsAuthenticated(true)
       } else {
         localStorage.removeItem('token')
+        setIsAuthenticated(false)
       }
     } catch (err) {
       console.error('Profile fetch failed:', err)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogleSuccess = async (response: any) => {
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_URL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        localStorage.setItem('token', data.token)
+        setUser(data.user)
+        setIsAuthenticated(true)
+        addToast('Welcome to UniFlow!', 'success')
+      } else {
+        addToast(data.error || 'Login failed', 'error')
+      }
+    } catch (err) {
+      addToast('Authentication service unreachable', 'error')
     } finally {
       setLoading(false)
     }
@@ -121,40 +149,44 @@ function App() {
     localStorage.removeItem('token')
     setUser(null)
     setIsAuthenticated(false)
-    window.location.href = '/'
   }
 
   // ─── Fetch all data ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) return
+    const token = localStorage.getItem('token')
+    if (!token) return
+
     setLoading(true)
     try {
-      // Check health first
+      // Check health first 
       const healthRes = await fetch(`${API_URL}/health`)
       const health = await safeJson(healthRes)
       setDbConnected(health.dbConnected)
 
+      const headers = { 'Authorization': `Bearer ${token}` }
       const [tasksRes, scheduleRes, assignmentsRes] = await Promise.all([
-        fetch(`${API_URL}/tasks`),
-        fetch(`${API_URL}/schedule`),
-        fetch(`${API_URL}/assignments`)
+        fetch(`${API_URL}/tasks`, { headers }),
+        fetch(`${API_URL}/schedule`, { headers }), // This might be public/shared
+        fetch(`${API_URL}/assignments`, { headers })
       ])
 
       const tasksData = await safeJson(tasksRes)
-      const scheduleData = await safeJson(scheduleRes)
       const assignmentsData = await safeJson(assignmentsRes)
+      
       setTasks(Array.isArray(tasksData) ? tasksData : [])
-      setSchedule(Array.isArray(scheduleData) ? scheduleData : [])
       setAssignments(Array.isArray(assignmentsData) ? assignmentsData : [])
+      
+      // Schedule is currently public but could be filtered too
+      const scheduleResData = await safeJson(scheduleRes)
+      setSchedule(Array.isArray(scheduleResData) ? scheduleResData : [])
     } catch (err: any) {
       console.error('fetchData error:', err)
-      addToast(err.message || 'Could not reach backend. Start server/server.js on port 5000.', 'error')
-      setTasks([])
-      setSchedule([])
+      addToast(err.message || 'Error fetching data', 'error')
     } finally {
       setLoading(false)
     }
-  }, [addToast])
+  }, [addToast, isAuthenticated])
 
   useEffect(() => { fetchData() }, [fetchData, isAuthenticated])
 
@@ -366,10 +398,13 @@ function App() {
           </div>
           <h2>Welcome to your dashboard</h2>
           <p>Please continue with your student account to access your tasks and assignments.</p>
-          <a href={`${API_URL}/auth/google`} className="btn-google">
-            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" />
-            Continue with Google
-          </a>
+          <div className="btn-google-wrap" style={{ display: 'flex', justifyContent: 'center' }}>
+            <GoogleLogin 
+              onSuccess={handleGoogleSuccess} 
+              onError={() => addToast('Google Login Failed', 'error')}
+              useOneTap
+            />
+          </div>
         </div>
       </div>
     )
