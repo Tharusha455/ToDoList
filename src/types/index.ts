@@ -31,3 +31,12 @@ export interface Schedule {
   EndTime: string; // HH:mm
   Venue: string;
 }
+
+export interface User {
+  _id: string;
+  googleId: string;
+  email: string;
+  name: string;
+  profilePic?: string;
+  role: 'student' | 'admin';
+}

@@ -6,16 +6,65 @@ require('dotenv').config();
 const Task = require('./models/Task');
 const Schedule = require('./models/Schedule');
 const Assignment = require('./models/Assignment');
+const User = require('./models/User');
+
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('express-session');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 
 // CORS — allow requests from any localhost origin
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Session & Passport Setup
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback_secret',
+  resave: false,
+  saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/api/auth/google/callback"
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await User.findOne({ googleId: profile.id });
+      
+      if (!user) {
+        // If it's the first user ever, make them admin
+        const userCount = await User.countDocuments();
+        user = new User({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: profile.emails[0].value,
+          profilePic: profile.photos[0].value,
+          role: userCount === 0 ? 'admin' : 'student'
+        });
+        await user.save();
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err, null);
+    }
+  }
+));
+
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser(async (id, done) => {
+  const user = await User.findById(id);
+  done(null, user);
+});
 
 const PORT = process.env.PORT || 5000;
 // Use MONGODB_URI (Vercel standard) or MONGO_URI (.env)
@@ -164,6 +213,40 @@ app.delete('/api/assignments/:id', async (req, res) => {
     res.json({ message: 'Assignment deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ----- AUTH ROUTES -----
+app.get('/api/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/api/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res) => {
+    // Generate JWT
+    const token = jwt.sign(
+      { id: req.user._id, role: req.user.role },
+      process.env.JWT_SECRET || 'jwt_fallback',
+      { expiresIn: '7d' }
+    );
+    
+    // Redirect back to frontend with token
+    res.redirect(`http://localhost:5173?token=${token}`);
+  }
+);
+
+app.get('/api/auth/me', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token' });
+  
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'jwt_fallback');
+    const user = await User.findById(decoded.id);
+    res.json(user);
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
   }
 });
 

@@ -24,7 +24,7 @@ import LectureForm from './components/LectureForm'
 import { ProgressBar } from './components/DashboardWidgets'
 import AssignmentTab from './components/AssignmentTab'
 
-import type { Task, Schedule, DayOfWeek, Assignment } from './types/index'
+import type { Task, Schedule, DayOfWeek, Assignment, User as UserType } from './types/index'
 import './styles/global.css'
 
 const API_URL = '/api'
@@ -60,6 +60,8 @@ function App() {
   const [schedule, setSchedule] = useState<Schedule[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<UserType | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [dbConnected, setDbConnected] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -79,8 +81,52 @@ function App() {
 
   const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id))
 
+  useEffect(() => {
+    // Check for token in URL (from Google redirect)
+    const urlParams = new URLSearchParams(window.location.search)
+    const token = urlParams.get('token')
+    if (token) {
+      localStorage.setItem('token', token)
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+
+    const storedToken = localStorage.getItem('token')
+    if (storedToken) {
+      fetchUserProfile(storedToken)
+    } else {
+      setLoading(false)
+    }
+  }, [])
+
+  const fetchUserProfile = async (token: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const userData = await res.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        localStorage.removeItem('token')
+      }
+    } catch (err) {
+      console.error('Profile fetch failed:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    setUser(null)
+    setIsAuthenticated(false)
+    window.location.href = '/'
+  }
+
   // ─── Fetch all data ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
+    if (!isAuthenticated) return
     setLoading(true)
     try {
       // Check health first
@@ -110,7 +156,7 @@ function App() {
     }
   }, [addToast])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData, isAuthenticated])
 
   // ─── Task CRUD ───────────────────────────────────────────────────────────
   const handleSaveTask = async (taskData: any) => {
@@ -307,6 +353,30 @@ function App() {
     </div>
   )
 
+  if (!isAuthenticated && !loading) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <div className="login-logo">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <h1>UniFlow</h1>
+          </div>
+          <h2>Welcome to your dashboard</h2>
+          <p>Please continue with your student account to access your tasks and assignments.</p>
+          <a href={`${API_URL}/auth/google`} className="btn-google">
+            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" />
+            Continue with Google
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) return <div className="app-root"><Spinner /></div>
+
   return (
     <div className="app-root">
       <Toast toasts={toasts} remove={removeToast} />
@@ -321,6 +391,7 @@ function App() {
         activeTab={activeTab}
         setActiveTab={(tab) => { setActiveTab(tab); setSidebarOpen(false) }}
         isOpen={sidebarOpen}
+        user={user}
       />
 
       {/* Main */}
@@ -343,9 +414,23 @@ function App() {
               <span className="db-badge db-disconnected">○ Offline</span>
             )}
             <Bell size={20} className="header-icon" />
-            <div className="user-chip">
-              <User size={18} />
-              <span>Tharusha</span>
+            <div className="user-profile-group">
+              <div className="user-chip">
+                {user?.profilePic ? (
+                  <img src={user.profilePic} alt="User" className="user-avatar" style={{width: 24, height: 24, borderRadius: '50%'}} />
+                ) : (
+                  <User size={18} />
+                )}
+                <span>{user?.name || 'User'}</span>
+                {user?.role === 'admin' && <span className="admin-badge">Admin</span>}
+              </div>
+              <button 
+                className="btn-logout" 
+                onClick={handleLogout}
+                title="Log Out"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </header>

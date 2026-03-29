@@ -1,13 +1,15 @@
 import React from 'react';
 import { LayoutDashboard, FileText, Calendar, Settings } from 'lucide-react';
+import type { User } from '../types';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isOpen: boolean;
+  user?: User | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, user }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'assignments', label: 'Assignments', icon: <FileText size={20} /> },
@@ -27,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) =>
 
       <div className="sidebar-greeting">
         <span>Welcome back</span>
-        Good Morning,<br />Tharusha!
+        {user?.name || 'Tharusha'}!
       </div>
 
       <div className="nav-section">

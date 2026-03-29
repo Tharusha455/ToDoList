@@ -566,3 +566,18 @@ input::placeholder { color: #94a3b8; }
 .btn-icon { background: none; border: none; padding: 4px; cursor: pointer; border-radius: 6px; }  
 .btn-icon:hover { background: #f1f5f9; }  
 .text-danger { color: #ef4444; } 
+  
+/* Login Screen */  
+.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f8fafc; padding: 20px; }  
+.login-card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 100%; text-align: center; }  
+.login-logo { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 24px; }  
+.login-logo h1 { font-size: 24px; font-weight: 700; color: #0f172a; margin: 0; }  
+.login-card h2 { font-size: 20px; color: #1e293b; margin-bottom: 12px; }  
+.login-card p { color: #64748b; font-size: 14px; margin-bottom: 32px; line-height: 1.6; }  
+.btn-google { display: flex; align-items: center; justify-content: center; gap: 12px; background: white; border: 1px solid #e2e8f0; padding: 12px 24px; border-radius: 10px; font-weight: 600; color: #0f172a; text-decoration: none; transition: all 0.2s; }  
+.btn-google:hover { background: #f8fafc; border-color: #cbd5e1; transform: translateY(-1px); }  
+.btn-google img { width: 20px; height: 20px; }  
+.user-profile-group { display: flex; align-items: center; gap: 12px; }  
+.btn-logout { background: none; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #64748b; cursor: pointer; transition: all 0.2s; }  
+.btn-logout:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }  
+.admin-badge { background: #2563eb; color: white; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: 700; } 
