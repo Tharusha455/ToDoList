@@ -10,6 +10,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    { id: 'assignments', label: 'Assignments', icon: <BookOpen size={20} /> },
     { id: 'lectures', label: 'Calendar', icon: <BookOpen size={20} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={20} /> },
   ];

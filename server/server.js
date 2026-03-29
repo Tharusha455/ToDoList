@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const Task = require('./models/Task');
 const Schedule = require('./models/Schedule');
+const Assignment = require('./models/Assignment');
 
 const app = express();
 
@@ -118,6 +119,49 @@ app.delete('/api/schedule/:id', async (req, res) => {
   try {
     await Schedule.findByIdAndDelete(req.params.id);
     res.json({ message: 'Schedule entry deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----- ASSIGNMENT ROUTES -----
+app.get('/api/assignments', async (req, res) => {
+  if (!isDBConnected) return res.json([]);
+  try {
+    const assignments = await Assignment.find().sort({ deadline: 1 });
+    res.json(assignments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/assignments', async (req, res) => {
+  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+  try {
+    const assignment = new Assignment(req.body);
+    const saved = await assignment.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/assignments/:id', async (req, res) => {
+  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+  try {
+    const updated = await Assignment.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Assignment not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/assignments/:id', async (req, res) => {
+  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected' });
+  try {
+    await Assignment.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Assignment deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

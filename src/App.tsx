@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { Plus, Search, Bell, User, BookOpen, Menu, X, AlertCircle, CheckCircle, Settings } from 'lucide-react'
+import { Plus, Search, Bell, User, BookOpen, Menu, X, AlertCircle, CheckCircle, Settings, Clock } from 'lucide-react'
 
 // Parse JSON safely — returns null if response is HTML (server down)
 async function safeJson(res: Response) {
@@ -14,7 +14,7 @@ async function safeJson(res: Response) {
   }
   return res.json()
 }
-import { isSameDay, parseISO } from 'date-fns'
+import { isSameDay, parseISO, isBefore, addHours, format } from 'date-fns'
 
 import Sidebar from './components/Sidebar'
 import TaskCard from './components/TaskCard'
@@ -22,8 +22,9 @@ import TaskForm from './components/TaskForm'
 import LectureCard from './components/LectureCard'
 import LectureForm from './components/LectureForm'
 import { ProgressBar } from './components/DashboardWidgets'
+import AssignmentTab from './components/AssignmentTab'
 
-import type { Task, Schedule, DayOfWeek } from './types/index'
+import type { Task, Schedule, DayOfWeek, Assignment } from './types/index'
 import './styles/global.css'
 
 const API_URL = '/api'
@@ -57,6 +58,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [tasks, setTasks] = useState<Task[]>([])
   const [schedule, setSchedule] = useState<Schedule[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
   const [loading, setLoading] = useState(true)
   const [dbConnected, setDbConnected] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -86,15 +88,18 @@ function App() {
       const health = await safeJson(healthRes)
       setDbConnected(health.dbConnected)
 
-      const [tasksRes, scheduleRes] = await Promise.all([
+      const [tasksRes, scheduleRes, assignmentsRes] = await Promise.all([
         fetch(`${API_URL}/tasks`),
-        fetch(`${API_URL}/schedule`)
+        fetch(`${API_URL}/schedule`),
+        fetch(`${API_URL}/assignments`)
       ])
 
       const tasksData = await safeJson(tasksRes)
       const scheduleData = await safeJson(scheduleRes)
+      const assignmentsData = await safeJson(assignmentsRes)
       setTasks(Array.isArray(tasksData) ? tasksData : [])
       setSchedule(Array.isArray(scheduleData) ? scheduleData : [])
+      setAssignments(Array.isArray(assignmentsData) ? assignmentsData : [])
     } catch (err: any) {
       console.error('fetchData error:', err)
       addToast(err.message || 'Could not reach backend. Start server/server.js on port 5000.', 'error')
@@ -197,6 +202,51 @@ function App() {
       addToast('Lecture removed.', 'info')
     } catch (err: any) {
       addToast(err.message || 'Failed to delete.', 'error')
+    }
+  }
+
+  // ─── Assignment CRUD ─────────────────────────────────────────────────────
+  const handleAddAssignment = async (data: any) => {
+    try {
+      const res = await fetch(`${API_URL}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (!res.ok) throw new Error('Failed to create assignment')
+      const saved = await res.json()
+      setAssignments(prev => [...prev, saved])
+      addToast('Assignment created!', 'success')
+    } catch (err: any) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const handleToggleAssignmentStatus = async (id: string, status: 'Pending' | 'Completed') => {
+    try {
+      const res = await fetch(`${API_URL}/assignments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      if (!res.ok) throw new Error('Failed to update')
+      const updated = await res.json()
+      setAssignments(prev => prev.map(a => a._id === id ? updated : a))
+      addToast(`Assignment marked as ${status.toLowerCase()}!`, 'info')
+    } catch (err: any) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const handleDeleteAssignment = async (id: string) => {
+    if (!confirm('Delete this assignment?')) return
+    try {
+      const res = await fetch(`${API_URL}/assignments/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete failed')
+      setAssignments(prev => prev.filter(a => a._id !== id))
+      addToast('Assignment deleted.', 'info')
+    } catch (err: any) {
+      addToast(err.message, 'error')
     }
   }
 
@@ -316,31 +366,84 @@ function App() {
                 </div>
 
                 {loading ? <Spinner /> : (
-                  <div className="timetable-grid">
-                    {DAYS.map(day => (
-                      <div key={day} className="day-col">
-                        <div className="day-header">{day.slice(0, 3)}</div>
-                        <div className="day-slots">
-                          {schedule
-                            .filter(s => s.Day === day)
-                            .sort((a, b) => a.StartTime.localeCompare(b.StartTime))
-                            .map(lecture => (
-                              <LectureCard
-                                key={lecture._id}
-                                lecture={lecture}
-                                onDelete={handleDeleteSchedule}
-                                onEdit={(l) => { setEditingLecture(l); setIsLectureFormOpen(true) }}
-                              />
-                            ))}
-                          {schedule.filter(s => s.Day === day).length === 0 && (
-                            <div className="empty-slot" />
-                          )}
-                        </div>
+                  <>
+                    {assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length > 0 && (
+                      <div className="notification-banner">
+                        <Bell size={20} />
+                        <span>You have <strong>{assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length}</strong> assignments due soon!</span>
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    <div className="timetable-grid">
+                      {DAYS.map(day => (
+                        <div key={day} className="day-col">
+                          <div className="day-header">{day.slice(0, 3)}</div>
+                          <div className="day-slots">
+                            {schedule
+                              .filter(s => s.Day === day)
+                              .sort((a, b) => a.StartTime.localeCompare(b.StartTime))
+                              .map(lecture => (
+                                <LectureCard
+                                  key={lecture._id}
+                                  lecture={lecture}
+                                  onDelete={handleDeleteSchedule}
+                                  onEdit={(l) => { setEditingLecture(l); setIsLectureFormOpen(true) }}
+                                />
+                              ))}
+                            {schedule.filter(s => s.Day === day).length === 0 && (
+                              <div className="empty-slot" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="section-header" style={{ marginTop: '2.5rem' }}>
+                      <h2>Upcoming Deadlines</h2>
+                    </div>
+                    <div className="assignment-list">
+                      {assignments
+                        .filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48)))
+                        .sort((a, b) => a.deadline.localeCompare(b.deadline))
+                        .map(item => (
+                          <div key={item._id} className="assignment-card">
+                            <div className="assignment-main">
+                              <div className="assignment-info">
+                                <h4 className="assignment-title">
+                                  {item.title}
+                                  {isBefore(new Date(item.deadline), addHours(new Date(), 24)) && (
+                                    <span className="badge badge-urgent">
+                                      <AlertCircle size={12} /> Urgent
+                                    </span>
+                                  )}
+                                </h4>
+                                <p className="assignment-subject">{item.subject}</p>
+                              </div>
+                              <div className="assignment-deadline">
+                                <Clock size={14} />
+                                <span>Due: {format(new Date(item.deadline), 'MMM d, h:mm a')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      {assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length === 0 && (
+                        <div className="empty-state">
+                          <p>No urgent deadlines. Good job!</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
+            )}
+
+            {activeTab === 'assignments' && (
+              <AssignmentTab 
+                assignments={assignments}
+                onAdd={handleAddAssignment}
+                onDelete={handleDeleteAssignment}
+                onToggleStatus={handleToggleAssignmentStatus}
+              />
             )}
 
             {activeTab === 'lectures' && (

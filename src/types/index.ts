@@ -12,6 +12,17 @@ export interface Task {
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
+export interface Assignment {
+  _id?: string;
+  title: string;
+  subject: string;
+  description?: string;
+  deadline: string;
+  status: 'Pending' | 'Completed';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Schedule {
   _id?: string;
   Subject: string;
