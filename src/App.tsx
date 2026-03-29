@@ -83,14 +83,6 @@ function App() {
   const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id))
 
   useEffect(() => {
-    // Check for token in URL (from Google redirect)
-    const urlParams = new URLSearchParams(window.location.search)
-    const token = urlParams.get('token')
-    if (token) {
-      localStorage.setItem('token', token)
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-
     const storedToken = localStorage.getItem('token')
     if (storedToken) {
       fetchUserProfile(storedToken)
@@ -123,23 +115,31 @@ function App() {
   const handleGoogleSuccess = async (response: any) => {
     try {
       setLoading(true)
+      console.log('Google credential received, authenticating with backend...')
       const res = await fetch(`${API_URL}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: response.credential })
       })
       
-      const data = await res.json()
-      if (res.ok) {
-        localStorage.setItem('token', data.token)
-        setUser(data.user)
-        setIsAuthenticated(true)
-        addToast('Welcome to UniFlow!', 'success')
-      } else {
-        addToast(data.error || 'Login failed', 'error')
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Login failed with status:', res.status, errorData)
+        throw new Error(errorData.error || `HTTP ${res.status}`)
       }
-    } catch (err) {
-      addToast('Authentication service unreachable', 'error')
+
+      const data = await res.json()
+      console.log('Login successful, setting session...')
+      localStorage.setItem('token', data.token)
+      
+      // Update state together to trigger re-render
+      setUser(data.user)
+      setIsAuthenticated(true)
+      addToast('Welcome to UniFlow!', 'success')
+      
+    } catch (err: any) {
+      console.error('Google Auth Error:', err)
+      addToast(err.message || 'Authentication service unreachable', 'error')
     } finally {
       setLoading(false)
     }

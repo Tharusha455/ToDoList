@@ -92,8 +92,17 @@ app.post('/api/auth/google', checkDB, async (req, res) => {
       process.env.JWT_SECRET || 'fallback_secret',
       { expiresIn: '7d' }
     );
-    res.json({ token, user });
+    res.json({ 
+      token, 
+      user: { 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        picture: user.profilePic 
+      } 
+    });
   } catch (err) {
+    console.error('Auth verify error:', err);
     res.status(400).json({ error: 'Authentication failed' });
   }
 });
