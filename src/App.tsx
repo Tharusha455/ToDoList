@@ -196,6 +196,11 @@ function App() {
   useEffect(() => { fetchData() }, [fetchData, isAuthenticated])
 
   // ─── Task CRUD ───────────────────────────────────────────────────────────
+  const getAuthHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  })
+
   const handleSaveTask = async (taskData: any) => {
     const isEdit = !!taskData._id
     const url = isEdit ? `${API_URL}/tasks/${taskData._id}` : `${API_URL}/tasks`
@@ -203,7 +208,7 @@ function App() {
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(taskData)
       })
       if (!res.ok) {
@@ -227,7 +232,7 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/tasks/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ Status: !task.Status })
       })
       if (!res.ok) throw new Error('Update failed')
@@ -242,7 +247,10 @@ function App() {
   const handleDeleteTask = async (id: string) => {
     if (!confirm('Delete this task?')) return
     try {
-      const res = await fetch(`${API_URL}/tasks/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_URL}/tasks/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
       if (!res.ok) throw new Error('Delete failed')
       setTasks(prev => prev.filter(t => t._id !== id))
       addToast('Task deleted.', 'info')
@@ -259,7 +267,7 @@ function App() {
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data)
       })
       if (!res.ok) {
@@ -279,7 +287,10 @@ function App() {
   const handleDeleteSchedule = async (id: string) => {
     if (!confirm('Delete this schedule entry?')) return
     try {
-      const res = await fetch(`${API_URL}/schedule/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_URL}/schedule/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
       if (!res.ok) throw new Error('Delete failed')
       setSchedule(prev => prev.filter(s => s._id !== id))
       addToast('Lecture removed.', 'info')
@@ -293,7 +304,7 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/assignments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data)
       })
       if (!res.ok) throw new Error('Failed to create assignment')
@@ -309,7 +320,7 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/assignments/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ status })
       })
       if (!res.ok) throw new Error('Failed to update')
@@ -324,7 +335,10 @@ function App() {
   const handleDeleteAssignment = async (id: string) => {
     if (!confirm('Delete this assignment?')) return
     try {
-      const res = await fetch(`${API_URL}/assignments/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_URL}/assignments/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
       if (!res.ok) throw new Error('Delete failed')
       setAssignments(prev => prev.filter(a => a._id !== id))
       addToast('Assignment deleted.', 'info')
