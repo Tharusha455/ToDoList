@@ -14,38 +14,55 @@ const jwt = require('jsonwebtoken');
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const app = express();
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173', 
+  'http://localhost:5174', 
+  'http://127.0.0.1:5173', 
+  'http://127.0.0.1:5174',
+  /\.vercel\.app$/ // Matches any Vercel deployment URL
+];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.some(pattern => typeof pattern === 'string' ? pattern === origin : pattern.test(origin))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 
-// ----- DATABASE CONNECTION -----
-let isDBConnected = false;
+// ----- DATABASE CONNECTION (Serverless Optimized) -----
 const connectDB = async () => {
+  if (mongoose.connection.readyState >= 1) return;
   if (!MONGO_URI) {
-    console.error('❌ MONGODB_URI is missing in .env');
+    console.error('❌ MONGODB_URI is missing');
     return;
   }
   try {
-    await mongoose.connect(MONGO_URI);
-    isDBConnected = true;
-    console.log('✅ MongoDB Connected Ready');
+    await mongoose.connect(MONGO_URI, { dbName: 'UniFlow' });
+    console.log('✅ MongoDB Connected to UniFlow');
   } catch (err) {
     console.error('❌ MongoDB Connection Error:', err.message);
-    isDBConnected = false;
+    throw err;
   }
 };
-connectDB();
 
-// ----- MIDDLEWARE -----
-const checkDB = (req, res, next) => {
-  if (!isDBConnected) return res.status(503).json({ error: 'Database not connected. Please try again in 30 seconds.' });
-  next();
+// Middleware to ensure DB is connected before any API call
+const ensureDB = async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(503).json({ error: 'Database connection failed. Please try again.' });
+  }
 };
 
 const authenticate = async (req, res, next) => {
@@ -65,7 +82,7 @@ const authenticate = async (req, res, next) => {
 };
 
 // ----- AUTH ROUTES -----
-app.post('/api/auth/google', checkDB, async (req, res) => {
+app.post('/api/auth/google', ensureDB, async (req, res) => {
   const { credential } = req.body;
   try {
     const ticket = await client.verifyIdToken({
@@ -92,7 +109,10 @@ app.post('/api/auth/google', checkDB, async (req, res) => {
       process.env.JWT_SECRET || 'fallback_secret',
       { expiresIn: '7d' }
     );
-    res.json({ 
+
+    console.log(`✅ User authenticated: ${user.email} (Role: ${user.role})`);
+    
+    res.status(200).json({ 
       token, 
       user: { 
         name: user.name, 
@@ -102,15 +122,15 @@ app.post('/api/auth/google', checkDB, async (req, res) => {
       } 
     });
   } catch (err) {
-    console.error('Auth verify error:', err);
-    res.status(400).json({ error: 'Authentication failed' });
+    console.error('❌ Google Auth Error:', err.message);
+    res.status(401).json({ error: 'Authentication failed' });
   }
 });
 
 app.get('/api/auth/me', authenticate, (req, res) => res.json(req.user));
 
 // ----- TASK ROUTES -----
-app.get('/api/tasks', checkDB, authenticate, async (req, res) => {
+app.get('/api/tasks', ensureDB, authenticate, async (req, res) => {
   try {
     // RBAC: Students only see their own tasks, Admins see all
     const query = req.user.role === 'admin' ? {} : { user: req.user._id };
@@ -121,7 +141,7 @@ app.get('/api/tasks', checkDB, authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/tasks', checkDB, authenticate, async (req, res) => {
+app.post('/api/tasks', ensureDB, authenticate, async (req, res) => {
   try {
     const task = new Task({ ...req.body, user: req.user._id });
     const saved = await task.save();
@@ -132,7 +152,7 @@ app.post('/api/tasks', checkDB, authenticate, async (req, res) => {
 });
 
 // Other task routes should also be protected and check ownership if not admin
-app.put('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
+app.put('/api/tasks/:id', ensureDB, authenticate, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
@@ -146,7 +166,7 @@ app.put('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
   }
 });
 
-app.delete('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
+app.delete('/api/tasks/:id', ensureDB, authenticate, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
@@ -161,7 +181,7 @@ app.delete('/api/tasks/:id', checkDB, authenticate, async (req, res) => {
 });
 
 // ----- ASSIGNMENT ROUTES -----
-app.get('/api/assignments', checkDB, authenticate, async (req, res) => {
+app.get('/api/assignments', ensureDB, authenticate, async (req, res) => {
   try {
     const query = req.user.role === 'admin' ? {} : { user: req.user._id };
     const assignments = await Assignment.find(query).sort({ deadline: 1 });
@@ -171,7 +191,7 @@ app.get('/api/assignments', checkDB, authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/assignments', checkDB, authenticate, async (req, res) => {
+app.post('/api/assignments', ensureDB, authenticate, async (req, res) => {
   try {
     const assignment = new Assignment({ ...req.body, user: req.user._id });
     const saved = await assignment.save();
@@ -181,7 +201,7 @@ app.post('/api/assignments', checkDB, authenticate, async (req, res) => {
   }
 });
 
-app.put('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
+app.put('/api/assignments/:id', ensureDB, authenticate, async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
@@ -195,7 +215,7 @@ app.put('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
   }
 });
 
-app.delete('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
+app.delete('/api/assignments/:id', ensureDB, authenticate, async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
@@ -210,7 +230,7 @@ app.delete('/api/assignments/:id', checkDB, authenticate, async (req, res) => {
 });
 
 // ----- SCHEDULE ROUTES (Public or Shared) -----
-app.get('/api/schedule', checkDB, async (req, res) => {
+app.get('/api/schedule', ensureDB, async (req, res) => {
   try {
     const schedule = await Schedule.find();
     res.json(schedule);

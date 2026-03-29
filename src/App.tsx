@@ -129,19 +129,24 @@ function App() {
       }
 
       const data = await res.json()
-      console.log('Login successful, setting session...')
+      console.log('Login successful, status 200. Token received.')
+      
+      // Save token
       localStorage.setItem('token', data.token)
       
-      // Update state together to trigger re-render
+      // Explicit state update to trigger immediate re-render
       setUser(data.user)
       setIsAuthenticated(true)
+      
       addToast('Welcome to UniFlow!', 'success')
+      
+      // Force loading to false immediately after state set
+      setLoading(false)
       
     } catch (err: any) {
       console.error('Google Auth Error:', err)
       addToast(err.message || 'Authentication service unreachable', 'error')
-    } finally {
-      setLoading(false)
+      setLoading(false) // Ensure spinner stops on error
     }
   }
 
