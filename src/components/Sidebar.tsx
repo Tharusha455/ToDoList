@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, BookOpen, Settings } from 'lucide-react';
+import { LayoutDashboard, FileText, Calendar, Settings } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -10,8 +10,8 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'assignments', label: 'Assignments', icon: <BookOpen size={20} /> },
-    { id: 'lectures', label: 'Calendar', icon: <BookOpen size={20} /> },
+    { id: 'assignments', label: 'Assignments', icon: <FileText size={20} /> },
+    { id: 'lectures', label: 'Calendar', icon: <Calendar size={20} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={20} /> },
   ];
 
