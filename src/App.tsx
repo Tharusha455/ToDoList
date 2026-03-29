@@ -360,23 +360,27 @@ function App() {
   const pendingTasks = tasks.filter(t => !t.Status)
   const DAYS: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
-  // ─── Right Sidebar content  ──────────────────────────────────────────────
-  const rightSidebarContent = (
-    <div className="right-sidebar-inner">
-      <div className="right-sidebar-header">
-        <h2>Upcoming Tasks</h2>
-        <span className="task-count-badge">{pendingTasks.length}</span>
+  const renderTaskSidebar = () => (
+    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-5 h-full relative xl:sticky xl:top-6">
+      <div className="flex items-center justify-between mb-5 px-1">
+        <h2 className="text-[17px] font-bold text-slate-800 tracking-tight">Upcoming Tasks</h2>
+        <span className="flex items-center justify-center bg-indigo-100 text-indigo-700 text-xs font-bold w-6 h-6 rounded-full ring-2 ring-white shadow-sm">
+          {pendingTasks.length}
+        </span>
       </div>
 
       {loading ? (
-        <div className="p-8 text-center text-slate-400 text-sm">Loading tasks...</div>
+        <div className="flex-1 flex items-center justify-center py-12 text-slate-400 text-sm font-medium">Loading tasks...</div>
       ) : pendingTasks.length === 0 ? (
-        <div className="empty-state">
-          <CheckCircle size={32} className="empty-icon" />
-          <p>All caught up! 🎉</p>
+        <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mb-4">
+            <CheckCircle size={32} />
+          </div>
+          <p className="text-slate-600 font-bold mb-1">All caught up! 🎉</p>
+          <p className="text-sm text-slate-400">No pending tasks found</p>
         </div>
       ) : (
-        <div className="task-list-scroll">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-2 -mr-2">
           {pendingTasks
             .sort((a, b) => a.DueDate.localeCompare(b.DueDate))
             .map(task => (
@@ -391,15 +395,20 @@ function App() {
         </div>
       )}
 
-      <button
-        onClick={() => { setEditingTask(null); setIsTaskFormOpen(true) }}
-        className="add-task-btn"
-      >
-        <Plus size={18} /> Add Task
-      </button>
-
-      <div className="progress-section">
-        <ProgressBar progress={progress} />
+      <div className="pt-4 mt-4 border-t border-slate-100 flex flex-col gap-4">
+        <button
+          onClick={() => { setEditingTask(null); setIsTaskFormOpen(true) }}
+          className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white rounded-xl py-2.5 font-semibold hover:bg-slate-800 transition-colors shadow-sm active:scale-95"
+        >
+          <Plus size={18} /> Add Task
+        </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+            <span>Daily Progress</span>
+            <span className="text-indigo-600">{progress}%</span>
+          </div>
+          <ProgressBar progress={progress} />
+        </div>
       </div>
     </div>
   )
@@ -432,12 +441,15 @@ function App() {
   if (loading) return <div className="app-root"><Spinner /></div>
 
   return (
-    <div className="app-root">
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-800">
       <Toast toasts={toasts} remove={removeToast} />
 
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 md:hidden transition-opacity" 
+          onClick={() => setSidebarOpen(false)} 
+        />
       )}
 
       {/* Sidebar */}
@@ -448,38 +460,56 @@ function App() {
         user={user}
       />
 
-      {/* Main */}
-      <div className="main-wrapper">
+      {/* Main Content Area */}
+      <div className="flex flex-col flex-1 w-full md:ml-64 transition-all duration-300 ease-in-out overflow-hidden">
         {/* Top Header */}
-        <header className="top-header">
-          <div className="header-left">
-            <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              <Menu size={22} />
+        <header className="flex items-center justify-between px-4 sm:px-8 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+          <div className="flex items-center gap-4 flex-1">
+            <button 
+              className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg md:hidden transition-colors outline-none focus:ring-2 focus:ring-blue-500" 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu size={24} />
             </button>
-            <div className="search-wrap">
-              <Search size={16} />
-              <input type="text" placeholder="Search tasks or lectures..." />
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-slate-100/80 rounded-xl flex-1 max-w-md border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+              <Search size={18} className="text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search tasks or lectures..." 
+                className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400"
+              />
             </div>
           </div>
-          <div className="header-right">
+          <div className="flex items-center gap-4 sm:gap-6">
             {dbConnected ? (
-              <span className="db-badge db-connected">● MongoDB</span>
+              <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-full border border-emerald-200/50">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> MongoDB
+              </span>
             ) : (
-              <span className="db-badge db-disconnected">○ Offline</span>
+              <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full border border-red-200/50">
+                <span className="w-2 h-2 rounded-full bg-red-500"></span> Offline
+              </span>
             )}
-            <Bell size={20} className="header-icon" />
-            <div className="user-profile-group">
-              <div className="user-chip">
+            <button className="text-slate-400 hover:text-slate-600 transition-colors relative">
+              <Bell size={22} />
+              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            </button>
+            <div className="flex items-center gap-4 border-l border-slate-200 pl-4 sm:pl-6">
+              <div className="flex items-center gap-3">
                 {user?.profilePic ? (
-                  <img src={user.profilePic} alt="User" className="user-avatar" style={{width: 24, height: 24, borderRadius: '50%'}} />
+                  <img src={user.profilePic} alt="User" className="w-9 h-9 rounded-full object-cover shadow-sm border border-slate-200" />
                 ) : (
-                  <User size={18} />
+                  <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-sm">
+                    <User size={18} />
+                  </div>
                 )}
-                <span>{user?.name || 'User'}</span>
-                {user?.role === 'admin' && <span className="admin-badge">Admin</span>}
+                <div className="hidden lg:block text-sm">
+                  <div className="font-semibold text-slate-800">{user?.name || 'User'}</div>
+                  {user?.role === 'admin' && <div className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">Admin</div>}
+                </div>
               </div>
               <button 
-                className="btn-logout" 
+                className="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors px-2 py-1.5 rounded-md hover:bg-red-50" 
                 onClick={handleLogout}
                 title="Log Out"
               >
@@ -489,35 +519,43 @@ function App() {
           </div>
         </header>
 
-        <div className="content-grid">
-          {/* Center Column */}
-          <main className="center-main">
-            {activeTab === 'dashboard' && (
-              <div className="dashboard-view">
-                <div className="section-header">
-                  <h2>Weekly Schedule</h2>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-24 space-y-8">
+          {/* Dashboard View - Splitting Main + Task Rail */}
+          {activeTab === 'dashboard' && (
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-8 animate-in fade-in duration-300 max-w-[1600px] mx-auto w-full">
+              
+              <main className="space-y-8">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Weekly Schedule</h2>
+                    <p className="text-sm text-slate-500 mt-1">Your upcoming lectures and classes.</p>
+                  </div>
                   <button
                     onClick={() => { setEditingLecture(null); setIsLectureFormOpen(true) }}
-                    className="btn-outline"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-200 shadow-sm px-4 py-2.5 sm:py-2 rounded-xl text-sm font-semibold hover:bg-indigo-50 transition-colors active:scale-95"
                   >
-                    <Plus size={15} /> Add Lecture
+                    <Plus size={16} /> <span>Add Lecture</span>
                   </button>
                 </div>
 
                 {loading ? <Spinner /> : (
                   <>
                     {assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length > 0 && (
-                      <div className="notification-banner">
-                        <Bell size={20} />
-                        <span>You have <strong>{assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length}</strong> assignments due soon!</span>
+                      <div className="flex items-center gap-3 p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl shadow-sm">
+                        <Bell size={20} className="text-amber-500 shrink-0" />
+                        <span className="text-sm font-medium">You have <strong>{assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length}</strong> assignments due soon!</span>
                       </div>
                     )}
 
-                    <div className="timetable-grid">
+                    {/* Schedule Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
                       {DAYS.map(day => (
-                        <div key={day} className="day-col">
-                          <div className="day-header">{day.slice(0, 3)}</div>
-                          <div className="day-slots">
+                        <div key={day} className="flex flex-col gap-3">
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-widest px-1 pb-1 border-b border-slate-200">
+                            {day.slice(0, 3)}
+                          </div>
+                          <div className="flex flex-col gap-3">
                             {schedule
                               .filter(s => s.Day === day)
                               .sort((a, b) => a.StartTime.localeCompare(b.StartTime))
@@ -529,111 +567,111 @@ function App() {
                                   onEdit={(l) => { setEditingLecture(l); setIsLectureFormOpen(true) }}
                                 />
                               ))}
-                            {schedule.filter(s => s.Day === day).length === 0 && (
-                              <div className="empty-slot" />
-                            )}
+                              {schedule.filter(s => s.Day === day).length === 0 && (
+                                <div className="h-16 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-xs font-semibold text-slate-400 bg-slate-50/50">
+                                  No classes
+                                </div>
+                              )}
                           </div>
                         </div>
                       ))}
                     </div>
 
-                    <div className="section-header" style={{ marginTop: '2.5rem' }}>
-                      <h2>Upcoming Deadlines</h2>
-                    </div>
-                    <div className="assignment-list">
-                      {assignments
-                        .filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48)))
-                        .sort((a, b) => a.deadline.localeCompare(b.deadline))
-                        .map(item => (
-                          <div key={item._id} className="assignment-card">
-                            <div className="assignment-main">
-                              <div className="assignment-info">
-                                <h4 className="assignment-title">
-                                  {item.title}
-                                  {isBefore(new Date(item.deadline), addHours(new Date(), 24)) && (
-                                    <span className="badge badge-urgent">
-                                      <AlertCircle size={12} /> Urgent
-                                    </span>
-                                  )}
-                                </h4>
-                                <p className="assignment-subject">{item.subject}</p>
-                              </div>
-                              <div className="assignment-deadline">
-                                <Clock size={14} />
+                    <div className="pt-6">
+                      <h2 className="text-xl font-bold text-slate-800 tracking-tight mb-4">Upcoming Deadlines</h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {assignments
+                          .filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48)))
+                          .sort((a, b) => a.deadline.localeCompare(b.deadline))
+                          .map(item => (
+                            <div key={item._id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-rose-500 flex flex-col gap-1">
+                              <h4 className="text-sm font-bold text-slate-800 truncate">
+                                {item.title}
+                              </h4>
+                              <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-2">{item.subject}</p>
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500 mt-auto bg-rose-50 w-fit px-2 py-1 rounded">
+                                <Clock size={12} />
                                 <span>Due: {format(new Date(item.deadline), 'MMM d, h:mm a')}</span>
                               </div>
                             </div>
+                          ))}
+                        {assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length === 0 && (
+                          <div className="col-span-full py-8 text-center text-sm font-medium text-slate-500 bg-white border border-slate-200 rounded-xl shadow-sm">
+                            No urgent deadlines. Good job!
                           </div>
-                        ))}
-                      {assignments.filter(a => a.status === 'Pending' && isBefore(new Date(a.deadline), addHours(new Date(), 48))).length === 0 && (
-                        <div className="empty-state">
-                          <p>No urgent deadlines. Good job!</p>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
-              </div>
-            )}
+              </main>
 
+              {/* Task Sidebar / Column */}
+              <aside className="w-full">
+                {renderTaskSidebar()}
+              </aside>
+            </div>
+          )}
             {activeTab === 'assignments' && (
-              <AssignmentTab 
-                assignments={assignments}
-                onAdd={handleAddAssignment}
-                onDelete={handleDeleteAssignment}
-                onToggleStatus={handleToggleAssignmentStatus}
-              />
+              <main className="flex-1 w-full max-w-7xl mx-auto">
+                <AssignmentTab 
+                  assignments={assignments}
+                  onAdd={handleAddAssignment}
+                  onDelete={handleDeleteAssignment}
+                  onToggleStatus={handleToggleAssignmentStatus}
+                />
+              </main>
             )}
 
             {activeTab === 'lectures' && (
-              <div className="dashboard-view">
-                <div className="section-header">
-                  <h2>All Lectures</h2>
-                  <button onClick={() => { setEditingLecture(null); setIsLectureFormOpen(true) }} className="btn-primary-sm">
-                    <Plus size={15} /> Add Lecture
-                  </button>
-                </div>
-                {loading ? <Spinner /> : (
-                  <div className="lecture-grid">
-                    {schedule.map(l => (
-                      <LectureCard
-                        key={l._id}
-                        lecture={l}
-                        onDelete={handleDeleteSchedule}
-                        onEdit={(lec) => { setEditingLecture(lec); setIsLectureFormOpen(true) }}
-                      />
-                    ))}
-                    {schedule.length === 0 && (
-                      <div className="empty-state-center">
-                        <BookOpen size={40} className="opacity-20" />
-                        <p>No lectures yet. Add one!</p>
-                      </div>
-                    )}
+              <main className="flex-1 w-full max-w-7xl mx-auto">
+                <div className="animate-in fade-in duration-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-800 tracking-tight">All Lectures</h2>
+                      <p className="text-sm text-slate-500 mt-1">Manage the global lecture schedule.</p>
+                    </div>
+                    <button onClick={() => { setEditingLecture(null); setIsLectureFormOpen(true) }} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-all active:scale-95 shadow-sm shadow-indigo-200">
+                      <Plus size={18} /> Add Lecture
+                    </button>
                   </div>
-                )}
-              </div>
+                  {loading ? <Spinner /> : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {schedule.map(l => (
+                        <LectureCard
+                          key={l._id}
+                          lecture={l}
+                          onDelete={handleDeleteSchedule}
+                          onEdit={(lec) => { setEditingLecture(lec); setIsLectureFormOpen(true) }}
+                        />
+                      ))}
+                      {schedule.length === 0 && (
+                        <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-white border-2 border-dashed border-slate-200 rounded-2xl">
+                          <BookOpen size={40} className="text-slate-300 mb-4" />
+                          <h3 className="text-lg font-bold text-slate-800 mb-1">No lectures yet</h3>
+                          <p className="text-sm text-slate-500">Add a lecture to get started.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </main>
             )}
 
             {activeTab === 'settings' && (
-              <div className="dashboard-view">
-                <div className="section-header"><h2>Settings</h2></div>
-                <div className="settings-card">
-                  <Settings size={40} className="opacity-20 mb-4" />
-                  <p className="text-slate-500">Settings module coming soon.</p>
+              <main className="flex-1 w-full max-w-7xl mx-auto">
+                <div className="animate-in fade-in duration-300">
+                  <div className="mb-8">
+                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Settings</h2>
+                    <p className="text-sm text-slate-500 mt-1">Manage your account preferences.</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <Settings size={48} className="text-slate-300 mb-4" />
+                    <p className="text-slate-500 font-medium">Settings module coming soon.</p>
+                  </div>
                 </div>
-              </div>
+              </main>
             )}
-          </main>
-
-          {/* Right sidebar — desktop/tablet visible */}
-          <aside className="right-col">
-            {rightSidebarContent}
-          </aside>
-        </div>
-
-        {/* Mobile-only task bar (below schedule) */}
-        <div className="mobile-task-bar">
-          {rightSidebarContent}
         </div>
       </div>
 
