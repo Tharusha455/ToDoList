@@ -17,18 +17,18 @@ app.use(cors({
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
-// Use Direct connection string from .env or Vercel
-const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
+// Use MONGODB_URI (Vercel standard) or MONGO_URI (.env)
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb+srv://todo:Password123@cluster0.yrxbtpb.mongodb.net/UniFlow?retryWrites=true&w=majority";
 
 let isDBConnected = false;
 
 mongoose.connect(MONGO_URI)
   .then(() => {
-    console.log('✅ Connected to MongoDB Atlas (via Direct Shards)');
+    console.log('✅ Connected to MongoDB Atlas (UniFlow Database)');
     isDBConnected = true;
   })
   .catch(err => {
-    console.error('❌ MongoDB Connection Error:', err.message);
+    console.error('❌ MongoDB Connection Error Details:', err);
     console.log('⚠️  Server running without DB — API will return empty arrays');
   });
 
