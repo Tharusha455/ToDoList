@@ -229,18 +229,48 @@ app.delete('/api/assignments/:id', ensureDB, authenticate, async (req, res) => {
   }
 });
 
-// ----- SCHEDULE ROUTES (Public or Shared) -----
+// ----- SCHEDULE ROUTES -----
 app.get('/api/schedule', ensureDB, async (req, res) => {
   try {
-    const schedule = await Schedule.find();
+    const schedule = await Schedule.find().sort({ Day: 1, StartTime: 1 });
     res.json(schedule);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', dbConnected: isDBConnected });
+app.post('/api/schedule', ensureDB, authenticate, async (req, res) => {
+  try {
+    const entry = new Schedule(req.body);
+    const saved = await entry.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/schedule/:id', ensureDB, authenticate, async (req, res) => {
+  try {
+    const updated = await Schedule.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Schedule entry not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/schedule/:id', ensureDB, authenticate, async (req, res) => {
+  try {
+    await Schedule.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Schedule entry deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/health', async (req, res) => {
+  const dbReady = mongoose.connection.readyState === 1;
+  res.json({ status: 'ok', dbConnected: dbReady });
 });
 
 module.exports = app;
