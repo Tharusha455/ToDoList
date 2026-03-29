@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Campus Student Management System
 
 A professional, 3-column SaaS task and lecture management system with MongoDB integration.
@@ -37,3 +38,6 @@ Follow these steps to get the full application running:
 - **Real-time Data**: Fully integrated with your MongoDB database.
 - **Professional Aesthetic**: Navy/Off-White color palette with clear typography and minimalist cards.
 - **Mobile Responsive**: Adapts across all device sizes.
+=======
+# ToDoList
+>>>>>>> d375adb0cfd4c403e5475c08929d273c58330843

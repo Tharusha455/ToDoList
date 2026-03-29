@@ -26,7 +26,7 @@ import { ProgressBar } from './components/DashboardWidgets'
 import type { Task, Schedule, DayOfWeek } from './types/index'
 import './styles/global.css'
 
-const API_URL = 'http://localhost:5000/api'
+const API_URL = '/api'
 
 // ─── Toast Notification ────────────────────────────────────────────────────
 type ToastType = 'success' | 'error' | 'info'

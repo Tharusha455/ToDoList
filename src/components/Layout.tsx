@@ -11,7 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, rightSidebar }) => {
   return (
     <div className="app-container">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar isOpen={true} activeTab={activeTab} setActiveTab={setActiveTab} />
       
       <main className="main-content">
         {children}

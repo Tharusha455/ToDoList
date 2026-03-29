@@ -17,8 +17,8 @@ app.use(cors({
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
-// Use Direct connection string from .env
-const MONGO_URI = process.env.MONGO_URI;
+// Use Direct connection string from .env or Vercel
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 
 let isDBConnected = false;
 
@@ -123,7 +123,12 @@ app.delete('/api/schedule/:id', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/api/health`);
-});
+// Standard export for Vercel serverless functions
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Local Server running on http://localhost:${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
+  });
+}
